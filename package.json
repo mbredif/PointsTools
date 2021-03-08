@@ -1,0 +1,31 @@
+{
+  "name": "blank_itowns",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "webpack-dev-server -d --hot --config webpack.config.js --watch",
+    "build": "cross-env NODE_ENV=production webpack",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "browser": {
+    "child_process": false
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "webpack": "^4.44.2",
+    "webpack-cli": "^3.3.12",
+    "webpack-dev-server": "^3.11.0"
+  },
+  "dependencies": {
+    "cli-progress": "^3.9.0",
+    "command-exists": "^1.2.9",
+    "itowns": "^2.31.0",
+    "json-templates": "^4.1.0",
+    "proj4": "^2.7.0",
+    "three": "0.125.2"
+  }
+}

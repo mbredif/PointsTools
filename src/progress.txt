@@ -1,0 +1,2 @@
+READYFILE:/home/gchoqueux/Cloud/Morbihan/Out//001777_235000_6709000.laz
+DONEFILE:/home/gchoqueux/Cloud/Morbihan/Out//001598_256000_6709000.laz
