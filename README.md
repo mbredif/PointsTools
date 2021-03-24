@@ -9,10 +9,10 @@ This file could place the ept cache on the globe.
 ## How convert to ept cache
 
 * Install :
-	* `Node js`
-	* `parallel`
-	* `Pdal`
-	* `entwine`
+	* `Node js` (https://nodejs.org or via package managers)
+	* `parallel` (https://www.gnu.org/software/parallel)
+	* `Pdal` (https://pdal.io/index.html)
+	* `entwine` (https://entwine.io the binary build by conda works)
 * Clone repository
 * setup configuration files:
 	```js
@@ -62,7 +62,7 @@ const points = new THREE.Group();
 view.scene.add(points);
 let pointclouds = [];
 
-// Load pivot file, create by points Tools
+// Load pivot file, create by points Tools (assuming the `outputFolder` set in the configuration file is `./Out/`).
 itowns.Fetcher.json('./Out/metadata/pivotTHREE.json').then((pivot) => {
 	const loader = new THREE.ObjectLoader();
 	return loader.parse(pivot);
