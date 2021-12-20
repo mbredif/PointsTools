@@ -5,6 +5,7 @@ const path = require('path');
 const { spawn, exec, execSync } = require('child_process');
 const parse = require('json-templates');
 const jsonPdalTemplate = require('./pdalPipelineTemplate.json');
+var xml2js = require('xml2js');
 const commandExistsSync = require('command-exists').sync;
 
 const itowns = require('itowns');
@@ -80,137 +81,164 @@ nodes.forEach((n) => {
     minz = Math.min(bbox.minz, minz);
 });
 
-const extent = new itowns.Extent(crs, minx, maxx, miny, maxy);
-console.log(' * Extent ', crs, '(west, east, south, north) :',`(${extent.west}, ${extent.east}, ${extent.south}, ${extent.north})`)
 
-const pivot = extent.center();
-console.log(' * Center extent', crs , ' : (', pivot.x, ',', pivot.y, ')');
+async function start() {
+    const extent = new itowns.Extent(crs, minx, maxx, miny, maxy);
+    console.log(' * Extent ', crs, '(west, east, south, north) :',`(${extent.west}, ${extent.east}, ${extent.south}, ${extent.north})`)
 
-const inCrs = crs;
+    var parser = new xml2js.Parser(/* options */);
+    const wmsData = fs.readFileSync(path.resolve(__dirname,'./wms_template.xml'));
 
-function computePdalPivot(pivot) {
-    // Compute matrix transformation to convert 4978 to local space
-    const pivot4978 = pivot.as('EPSG:4978');
-    const pivotWGS84 = pivot.as('EPSG:4326');
+    const wms = await parser.parseStringPromise(wmsData)
+    const dim = extent.dimensions().divideScalar(0.2);
+    const dataWindow = wms.GDAL_WMS.DataWindow[0];
+    dataWindow.UpperLeftX = Math.round(extent.west) - 1;
+    dataWindow.UpperLeftY = Math.round(extent.north) + 1;
+    dataWindow.LowerRightX = Math.round(extent.east) + 1;
+    dataWindow.LowerRightY = Math.round(extent.south) - 1;
 
-    console.log(' * Center extent', pivotWGS84.crs , ' : (', pivotWGS84.x.toFixed(6), '°,', pivotWGS84.y.toFixed(6), '°)\n');
+    dataWindow.SizeX = Math.round(dim.x + 2);
+    dataWindow.SizeY = Math.round(dim.y + 2);
 
-    const idWGGS84 = `${pivotWGS84.x}_${pivotWGS84.y}`;
+    var builder = new xml2js.Builder({ headless: true });
+    var xml = builder.buildObject(wms);
 
-    const quaternionZ = new THREE.Quaternion().setFromUnitVectors(pivotWGS84.geodesicNormal, new THREE.Vector3(0, 0, 1));
-    const scale = new THREE.Vector3(1, 1, 1);
+    // path to xml raster
+    const pathXmlRaster = path.resolve(__dirname,'./wms.xml');
 
-    const vectorPivot = pivot4978.toVector3().applyQuaternion(quaternionZ).negate();
+    fs.writeFileSync(pathXmlRaster, xml);
 
-    // transform matrix to apply in pdal pipeline
-    const mat = new THREE.Matrix4().compose(vectorPivot, quaternionZ, scale);
+    const pivot = extent.center();
+    console.log(' * Center extent', crs , ' : (', pivot.x, ',', pivot.y, ')');
 
-    // transform matrix to apply in pdal pipeline format
-    const matrixTransformation = mat.transpose().toArray().toString().replace(/,/g, ' ');
-    // console.log(matPdal);
-    const pdalPipeline = template({ inCrs, matrixTransformation });
+    const inCrs = crs;
 
-    // Generate pdal pipeline file
-    const pdalPipeline_File = path.resolve(pathMetadata, `pdalPipeline_${idWGGS84}.json`);
-    fs.writeFileSync(pdalPipeline_File, JSON.stringify(pdalPipeline, null, 2));
+    function computePdalPivot(pivot) {
+        // Compute matrix transformation to convert 4978 to local space
+        const pivot4978 = pivot.as('EPSG:4978');
+        const pivotWGS84 = pivot.as('EPSG:4326');
 
-    const pivotTHREE = new THREE.Object3D();
-    // THREE transform to place point cloud on globe
-    pivotTHREE.position.copy(vectorPivot).negate();
-    pivotTHREE.quaternion.copy(quaternionZ).invert();
-    pivotTHREE.position.applyQuaternion(pivotTHREE.quaternion);
-    pivotTHREE.updateMatrix();
-    pivotTHREE.updateMatrixWorld();
+        console.log(' * Center extent', pivotWGS84.crs , ' : (', pivotWGS84.x.toFixed(6), '°,', pivotWGS84.y.toFixed(6), '°)\n');
 
-    // Compute THREE Pivot and save in file, this must the parent of the EPT
-    const fileNameTHREEPivot = path.resolve(pathMetadata, `pivotTHREE.json`);
-    fs.writeFileSync(fileNameTHREEPivot, JSON.stringify(pivotTHREE.toJSON(), null, 2));
+        const idWGGS84 = `${pivotWGS84.x}_${pivotWGS84.y}`;
 
-    // Verify load and parse the file
-    // const verify = fs.readFileSync(fileNameTHREEPivot);
-    // console.log('obj', loader.parse(JSON.parse(verify)));
-    return pdalPipeline_File;
-}
+        const quaternionZ = new THREE.Quaternion().setFromUnitVectors(pivotWGS84.geodesicNormal, new THREE.Vector3(0, 0, 1));
+        const scale = new THREE.Vector3(1, 1, 1);
 
+        const vectorPivot = pivot4978.toVector3().applyQuaternion(quaternionZ).negate();
 
-const pdalPipeline_File = computePdalPivot(pivot);
+        // transform matrix to apply in pdal pipeline
+        const mat = new THREE.Matrix4().compose(vectorPivot, quaternionZ, scale);
 
-const pathOut4978 = path.resolve(outputFolder, './4978/');
-fs.mkdirSync(pathOut4978, { recursive: true })
+        // transform matrix to apply in pdal pipeline format
+        const matrixTransformation = mat.transpose().toArray().toString().replace(/,/g, ' ');
+        const pdalPipeline = template({ inCrs, matrixTransformation, pathXmlRaster });
 
-// Convert to EPSG:4978 local space
-const lsToLaz4978 = spawn(path.resolve(__dirname,'./to4978.sh'),  [inputFolder, pathOut4978, pdalPipeline_File]);
+        // Generate pdal pipeline file
+        const pdalPipeline_File = path.resolve(pathMetadata, `pdalPipeline_${idWGGS84}.json`);
+        fs.writeFileSync(pdalPipeline_File, JSON.stringify(pdalPipeline, null, 2));
 
-// create a new progress bar instance and use shades_classic theme
-const barPdal = new cliProgress.SingleBar({
-    format: 'Convert to laz 4978 [{bar}] {percentage}% | ETA: {eta}s',
-    forceRedraw: true }, cliProgress.Presets.shades_classic);
+        const pivotTHREE = new THREE.Object3D();
+        // THREE transform to place point cloud on globe
+        pivotTHREE.position.copy(vectorPivot).negate();
+        pivotTHREE.quaternion.copy(quaternionZ).invert();
+        pivotTHREE.position.applyQuaternion(pivotTHREE.quaternion);
+        pivotTHREE.updateMatrix();
+        pivotTHREE.updateMatrixWorld();
 
-// start the progress bar with a total value of 200 and start value of 0
-barPdal.start(100, 0);
+        // Compute THREE Pivot and save in file, this must the parent of the EPT
+        const fileNameTHREEPivot = path.resolve(pathMetadata, `pivotTHREE.json`);
+        fs.writeFileSync(fileNameTHREEPivot, JSON.stringify(pivotTHREE.toJSON(), null, 2));
 
-let progress = 0;
-
-lsToLaz4978.stdout.on('data', (data) => {
-    // update the current value in your application..
-    // console.log(`stdout: ${data}`);
-});
-
-lsToLaz4978.stderr.on('data', (data) => {
-    const m = data.toString().match(/(?<=Wrote\s).[0-9]+/gm);
-
-    if (m && m[0]) {
-        progress += parseInt(m[0]) / totalPoints * 100;
-        barPdal.update(progress);
-    }
-});
-
-lsToLaz4978.on('error', (error) => {
-    console.log(`error: ${error.message}`);
-});
-
-lsToLaz4978.on('close', (code) => {
-    barPdal.update(progress++);
-    // stop the progress bar
-    barPdal.stop();
-
-    const barEpt = new cliProgress.SingleBar({
-    format: 'Convert to ept 4978 [{bar}] {percentage}% | ETA: {eta}s',
-    forceRedraw: true }, cliProgress.Presets.shades_classic);
-    barEpt.start(100, 0);
-
-    const ept4978Path = path.resolve(outputFolder, './EPT_4978/');
-    fs.mkdirSync(ept4978Path, { recursive: true })
-
-    const configEPTFile = path.resolve(pathMetadata, `eptConfig.json`);
-
-    const configEpt = {
-        input: pathOut4978,
-        output: ept4978Path,
-        threads: [1, 1],
+        // Verify load and parse the file
+        // const verify = fs.readFileSync(fileNameTHREEPivot);
+        // console.log('obj', loader.parse(JSON.parse(verify)));
+        return pdalPipeline_File;
     }
 
-    fs.writeFileSync(configEPTFile, JSON.stringify(configEpt, null, 2));
 
-    const lsEPT = spawn('entwine',  ['build', '-c', configEPTFile]);
-    progress = 0;
-    lsEPT.stdout.on('data', (data) => {
-        const m = data.toString().match(/(?<=-)(.*)(?=%)/gm);
+    const pdalPipeline_File = computePdalPivot(pivot);
+
+    const pathOut4978 = path.resolve(outputFolder, './4978/');
+    fs.mkdirSync(pathOut4978, { recursive: true })
+
+    // Convert to EPSG:4978 local space
+    const lsToLaz4978 = spawn(path.resolve(__dirname,'./to4978.sh'),  [inputFolder, pathOut4978, pdalPipeline_File]);
+
+    // create a new progress bar instance and use shades_classic theme
+    const barPdal = new cliProgress.SingleBar({
+        format: 'Convert to laz 4978 [{bar}] {percentage}% | ETA: {eta}s',
+        forceRedraw: true }, cliProgress.Presets.shades_classic);
+
+    // start the progress bar with a total value of 200 and start value of 0
+    barPdal.start(100, 0);
+
+    let progress = 0;
+
+    lsToLaz4978.stdout.on('data', (data) => {
+        // update the current value in your application..
+        // console.log(`stdout: ${data}`);
+    });
+
+    lsToLaz4978.stderr.on('data', (data) => {
+        const m = data.toString().match(/(?<=Wrote\s).[0-9]+/gm);
 
         if (m && m[0]) {
-            progress = parseInt(m[0]);
-            barEpt.update(progress);
+            progress += parseInt(m[0]) / totalPoints * 100;
+            barPdal.update(progress);
         }
     });
-    lsEPT.stderr.on('data', (data) => {
-        console.log('stderr.on', data.toString());
 
-    });
-    lsEPT.on('error', (error) => {
-        console.log('error', error);
-    });
-    lsEPT.on('close', (code) => {
-        barEpt.stop();
+    lsToLaz4978.on('error', (error) => {
+        console.log(`error: ${error.message}`);
     });
 
-});
+    lsToLaz4978.on('close', (code) => {
+        barPdal.update(progress++);
+        // stop the progress bar
+        barPdal.stop();
+
+        const barEpt = new cliProgress.SingleBar({
+        format: 'Convert to ept 4978 [{bar}] {percentage}% | ETA: {eta}s',
+        forceRedraw: true }, cliProgress.Presets.shades_classic);
+        barEpt.start(100, 0);
+
+        const ept4978Path = path.resolve(outputFolder, './EPT_4978/');
+        fs.mkdirSync(ept4978Path, { recursive: true })
+
+        const configEPTFile = path.resolve(pathMetadata, `eptConfig.json`);
+
+        const configEpt = {
+            input: pathOut4978,
+            output: ept4978Path,
+            threads: [1, 1],
+        }
+
+        fs.writeFileSync(configEPTFile, JSON.stringify(configEpt, null, 2));
+
+        const lsEPT = spawn('entwine',  ['build', '-c', configEPTFile]);
+        progress = 0;
+        lsEPT.stdout.on('data', (data) => {
+            const m = data.toString().match(/(?<=-)(.*)(?=%)/gm);
+
+            if (m && m[0]) {
+                progress = parseInt(m[0]);
+                barEpt.update(progress);
+            }
+        });
+        lsEPT.stderr.on('data', (data) => {
+            console.log('stderr.on', data.toString());
+
+        });
+        lsEPT.on('error', (error) => {
+            console.log('error', error);
+        });
+        lsEPT.on('close', (code) => {
+            barEpt.stop();
+        });
+
+    });
+
+};
+
+start();

@@ -5,6 +5,10 @@
             "spatialreference":"{{inCrs}}"
         },
         {
+          "type":"filters.colorization",
+          "raster":"{{pathXmlRaster}}"
+        },
+        {
             "type":"filters.reprojection",
             "in_srs":"{{inCrs}}",
             "out_srs":"EPSG:4978"

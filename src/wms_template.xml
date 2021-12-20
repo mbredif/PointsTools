@@ -1,0 +1,23 @@
+<GDAL_WMS>
+  <Service name="WMS">
+    <Version>1.1.1</Version>
+    <ServerUrl>https://wxs.ign.fr/essentiels/geoportail/r/wms?SERVICE=WMS</ServerUrl>
+    <Layers>ORTHOIMAGERY.ORTHOPHOTOS</Layers>
+    <SRS>EPSG:2154</SRS>
+    <ImageFormat>image/jpeg</ImageFormat>
+    <Transparent>FALSE</Transparent>
+    <BBoxOrder>xyXY</BBoxOrder>
+  </Service>
+  <DataWindow>
+    <UpperLeftX>700000.00</UpperLeftX>
+    <UpperLeftY>7000000.00</UpperLeftY>
+    <LowerRightX>800000.00</LowerRightX>
+    <LowerRightY>6000000.00</LowerRightY>
+    <SizeX>500000</SizeX>
+    <SizeY>5000000</SizeY>
+  </DataWindow>
+  <BandsCount>3</BandsCount>
+  <BlockSizeX>1024</BlockSizeX>
+  <BlockSizeY>1024</BlockSizeY>
+  <OverviewCount>20</OverviewCount>
+</GDAL_WMS>
