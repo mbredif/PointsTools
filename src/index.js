@@ -169,6 +169,8 @@ async function start() {
     const pathOut4978 = path.resolve(outputFolder, './4978/');
     fs.mkdirSync(pathOut4978, { recursive: true })
 
+    const startTimePart1 = new Date();
+
     // Convert to EPSG:4978 local space
     const lsToLaz4978 = spawn(path.resolve(__dirname,'./to4978.sh'),  [inputFolder, pathOut4978, pdalPipeline_File]);
 
@@ -204,6 +206,9 @@ async function start() {
         barPdal.update(progress++);
         // stop the progress bar
         barPdal.stop();
+
+        const startTimePart2 = new Date();
+        console.log('Convert to laz 4978 last : ' + prettyTimeElapsed(startTimePart1, startTimePart2));
 
         const barEpt = new cliProgress.SingleBar({
         format: 'Convert to ept 4978 [{bar}] {percentage}% | ETA: {eta}s',
@@ -242,6 +247,9 @@ async function start() {
         });
         lsEPT.on('close', (code) => {
             barEpt.stop();
+            const endDate = new Date();
+            console.log('Convert to ept 4978: ' + prettyTimeElapsed(startTimePart2, endDate));
+            console.log('Total: ' + prettyTimeElapsed(startTimePart1, endDate));
         });
 
     });
@@ -249,3 +257,11 @@ async function start() {
 };
 
 start();
+
+function prettyTimeElapsed(startDate, endDate) {
+    const days = parseInt((endDate - startDate) / (1000 * 60 * 60 * 24));
+    const hours = parseInt(Math.abs(endDate - startDate) / (1000 * 60 * 60) % 24);
+    const minutes = parseInt(Math.abs(endDate.getTime() - startDate.getTime()) / (1000 * 60) % 60);
+    const seconds = parseInt(Math.abs(endDate.getTime() - startDate.getTime()) / (1000) % 60);
+    return days + ' days, ' + hours + ' hours, ' + minutes + ' minutes' + ', ' + seconds + ' seconds';
+}
