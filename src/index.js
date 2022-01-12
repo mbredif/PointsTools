@@ -40,10 +40,17 @@ const config = require(configFile);
 // get parameters from configuration file
 const inputFolder = path.resolve(processFolder, config.inputFolder);
 const outputFolder = path.resolve(processFolder, config.outputFolder);
+const threads = config.threads;
 const { crs, defs } = config.projection;
 
 if (!crs) {
     throw new Error('No projection crs');
+}
+
+if (isNaN(threads)) {
+    throw new Error('Threads must be a number, actual: ' + threads);
+} else {
+    console.log("\n * Threads : " + threads);
 }
 
 // define projection
@@ -61,7 +68,7 @@ const nodesFiles = fs.readFileSync(path.resolve(pathMetadata, './pdalInfoFiles.j
 
 const nodes = JSON.parse(nodesFiles);
 
-console.log('\n * Files count :\t', nodes.length);
+console.log(' * Files count :\t', nodes.length);
 
 let maxx = -Infinity;
 let maxy = -Infinity;
@@ -211,7 +218,7 @@ async function start() {
         const configEpt = {
             input: pathOut4978,
             output: ept4978Path,
-            threads: [1, 1],
+            threads: threads,
         }
 
         fs.writeFileSync(configEPTFile, JSON.stringify(configEpt, null, 2));
