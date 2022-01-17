@@ -62,6 +62,8 @@ if (config.colorize) {
     template = parse(jsonPdalTemplateNoColor);
 }
 
+console.log(' * Verbose Entwine : ' + config.verboseEntwine);
+
 // define projection
 proj4.defs(crs, defs);
 
@@ -218,11 +220,13 @@ async function start() {
 
         const startTimePart2 = new Date();
         console.log('Convert to laz 4978 last : ' + prettyTimeElapsed(startTimePart1, startTimePart2));
-
-        const barEpt = new cliProgress.SingleBar({
-        format: 'Convert to ept 4978 [{bar}] {percentage}% | ETA: {eta}s',
-        forceRedraw: true }, cliProgress.Presets.shades_classic);
-        barEpt.start(100, 0);
+        var barEpt;
+        if (!config.verboseEntwine) {
+                barEpt = new cliProgress.SingleBar({
+                format: 'Convert to ept 4978 [{bar}] {percentage}% | ETA: {eta}s',
+                forceRedraw: true }, cliProgress.Presets.shades_classic);
+                barEpt.start(100, 0);
+        }
 
         const ept4978Path = path.resolve(outputFolder, './EPT_4978/');
         fs.mkdirSync(ept4978Path, { recursive: true })
@@ -240,11 +244,15 @@ async function start() {
         const lsEPT = spawn('entwine',  ['build', '-c', configEPTFile]);
         progress = 0;
         lsEPT.stdout.on('data', (data) => {
-            const m = data.toString().match(/(?<=-)(.*)(?=%)/gm);
 
-            if (m && m[0]) {
-                progress = parseInt(m[0]);
-                barEpt.update(progress);
+            if (config.verboseEntwine) {
+                console.log(data.toString());
+            } else { // progress bar
+                const m = data.toString().match(/(?<=-)(.*)(?=%)/gm);
+                if (m && m[0]) {
+                    progress = parseInt(m[0]);
+                    barEpt.update(progress);
+                }
             }
         });
         lsEPT.stderr.on('data', (data) => {
@@ -255,7 +263,9 @@ async function start() {
             console.log('error', error);
         });
         lsEPT.on('close', (code) => {
-            barEpt.stop();
+            if (!config.verboseEntwine) {
+                barEpt.stop();
+            }
             const endDate = new Date();
             console.log('Convert to ept 4978: ' + prettyTimeElapsed(startTimePart2, endDate));
             console.log('Total: ' + prettyTimeElapsed(startTimePart1, endDate));
