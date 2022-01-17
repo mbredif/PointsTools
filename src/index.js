@@ -5,6 +5,7 @@ const path = require('path');
 const { spawn, exec, execSync } = require('child_process');
 const parse = require('json-templates');
 const jsonPdalTemplate = require('./pdalPipelineTemplate.json');
+const jsonPdalTemplateNoColor = require('./pdalPipelineTemplateNoColor.json');
 var xml2js = require('xml2js');
 const commandExistsSync = require('command-exists').sync;
 
@@ -28,7 +29,6 @@ if (mandatoryCommands.some(command => checkCommand(command) == false)) {
     return;
 }
 
-const template = parse(jsonPdalTemplate);
 
 const args = process.argv.slice(2);
 const processFolder = process.cwd();
@@ -51,6 +51,15 @@ if (isNaN(threads)) {
     throw new Error('Threads must be a number, actual: ' + threads);
 } else {
     console.log("\n * Threads : " + threads);
+}
+
+var template;
+if (config.colorize) {
+    console.log(' * Colorize : true');
+    template = parse(jsonPdalTemplate);
+} else {
+    console.log(' * Colorize : false');
+    template = parse(jsonPdalTemplateNoColor);
 }
 
 // define projection
