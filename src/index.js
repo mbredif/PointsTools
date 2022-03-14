@@ -5,6 +5,7 @@ const path = require('path');
 const { spawn, exec, execSync } = require('child_process');
 const parse = require('json-templates');
 const jsonPdalTemplate = require('./pdalPipelineTemplate.json');
+const jsonPdalTemplateNoColor = require('./pdalPipelineTemplateNoColor.json');
 var xml2js = require('xml2js');
 const commandExistsSync = require('command-exists').sync;
 
@@ -28,7 +29,6 @@ if (mandatoryCommands.some(command => checkCommand(command) == false)) {
     return;
 }
 
-const template = parse(jsonPdalTemplate);
 
 const args = process.argv.slice(2);
 const processFolder = process.cwd();
@@ -40,11 +40,29 @@ const config = require(configFile);
 // get parameters from configuration file
 const inputFolder = path.resolve(processFolder, config.inputFolder);
 const outputFolder = path.resolve(processFolder, config.outputFolder);
+const threads = config.threads;
 const { crs, defs } = config.projection;
 
 if (!crs) {
     throw new Error('No projection crs');
 }
+
+if (isNaN(threads)) {
+    throw new Error('Threads must be a number, actual: ' + threads);
+} else {
+    console.log("\n * Threads : " + threads);
+}
+
+var template;
+if (config.colorize) {
+    console.log(' * Colorize : true');
+    template = parse(jsonPdalTemplate);
+} else {
+    console.log(' * Colorize : false');
+    template = parse(jsonPdalTemplateNoColor);
+}
+
+console.log(' * Verbose Entwine : ' + config.verboseEntwine);
 
 // define projection
 proj4.defs(crs, defs);
@@ -61,7 +79,7 @@ const nodesFiles = fs.readFileSync(path.resolve(pathMetadata, './pdalInfoFiles.j
 
 const nodes = JSON.parse(nodesFiles);
 
-console.log('\n * Files count :\t', nodes.length);
+console.log(' * Files count :\t', nodes.length);
 
 let maxx = -Infinity;
 let maxy = -Infinity;
@@ -162,6 +180,8 @@ async function start() {
     const pathOut4978 = path.resolve(outputFolder, './4978/');
     fs.mkdirSync(pathOut4978, { recursive: true })
 
+    const startTimePart1 = new Date();
+
     // Convert to EPSG:4978 local space
     const lsToLaz4978 = spawn(path.resolve(__dirname,'./to4978.sh'),  [inputFolder, pathOut4978, pdalPipeline_File]);
 
@@ -198,10 +218,15 @@ async function start() {
         // stop the progress bar
         barPdal.stop();
 
-        const barEpt = new cliProgress.SingleBar({
-        format: 'Convert to ept 4978 [{bar}] {percentage}% | ETA: {eta}s',
-        forceRedraw: true }, cliProgress.Presets.shades_classic);
-        barEpt.start(100, 0);
+        const startTimePart2 = new Date();
+        console.log('Convert to laz 4978 last : ' + prettyTimeElapsed(startTimePart1, startTimePart2));
+        var barEpt;
+        if (!config.verboseEntwine) {
+                barEpt = new cliProgress.SingleBar({
+                format: 'Convert to ept 4978 [{bar}] {percentage}% | ETA: {eta}s',
+                forceRedraw: true }, cliProgress.Presets.shades_classic);
+                barEpt.start(100, 0);
+        }
 
         const ept4978Path = path.resolve(outputFolder, './EPT_4978/');
         fs.mkdirSync(ept4978Path, { recursive: true })
@@ -211,7 +236,7 @@ async function start() {
         const configEpt = {
             input: pathOut4978,
             output: ept4978Path,
-            threads: [1, 1],
+            threads: threads,
         }
 
         fs.writeFileSync(configEPTFile, JSON.stringify(configEpt, null, 2));
@@ -219,11 +244,15 @@ async function start() {
         const lsEPT = spawn('entwine',  ['build', '-c', configEPTFile]);
         progress = 0;
         lsEPT.stdout.on('data', (data) => {
-            const m = data.toString().match(/(?<=-)(.*)(?=%)/gm);
 
-            if (m && m[0]) {
-                progress = parseInt(m[0]);
-                barEpt.update(progress);
+            if (config.verboseEntwine) {
+                console.log(data.toString());
+            } else { // progress bar
+                const m = data.toString().match(/(?<=-)(.*)(?=%)/gm);
+                if (m && m[0]) {
+                    progress = parseInt(m[0]);
+                    barEpt.update(progress);
+                }
             }
         });
         lsEPT.stderr.on('data', (data) => {
@@ -234,7 +263,12 @@ async function start() {
             console.log('error', error);
         });
         lsEPT.on('close', (code) => {
-            barEpt.stop();
+            if (!config.verboseEntwine) {
+                barEpt.stop();
+            }
+            const endDate = new Date();
+            console.log('Convert to ept 4978: ' + prettyTimeElapsed(startTimePart2, endDate));
+            console.log('Total: ' + prettyTimeElapsed(startTimePart1, endDate));
         });
 
     });
@@ -242,3 +276,11 @@ async function start() {
 };
 
 start();
+
+function prettyTimeElapsed(startDate, endDate) {
+    const days = parseInt((endDate - startDate) / (1000 * 60 * 60 * 24));
+    const hours = parseInt(Math.abs(endDate - startDate) / (1000 * 60 * 60) % 24);
+    const minutes = parseInt(Math.abs(endDate.getTime() - startDate.getTime()) / (1000 * 60) % 60);
+    const seconds = parseInt(Math.abs(endDate.getTime() - startDate.getTime()) / (1000) % 60);
+    return days + ' days, ' + hours + ' hours, ' + minutes + ' minutes' + ', ' + seconds + ' seconds';
+}
