@@ -7,9 +7,9 @@ echo '\n'
 echo $inFolder
 echo $outFolder
 
-inFiles=$inFolder/*.laz
+inFiles=$inFolder/*.las
 
 ls $inFiles | \
 parallel -I{} pdal -v 8 pipeline --progress progress.txt $pdalPipeline_File  \
  --readers.las.filename={} \
- --writers.las.filename=$outFolder'/{/.}.laz' \
+ --writers.las.filename=$outFolder'/{/.}.las' \

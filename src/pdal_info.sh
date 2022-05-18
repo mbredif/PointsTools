@@ -13,7 +13,7 @@ echo "infoFilesName $infoFilesName"
 echo "[" > $infoFilesName
 
 # Create info files
-ls "$1" | parallel -I{} "pdal info -i "$1"/{/.}.laz --summary && echo ","" >> $infoFilesName
+ls "$1" | parallel -I{} "pdal info -i "$1"/{/.}.las --summary && echo ","" >> $infoFilesName
 
 sed -i '$ d' $infoFilesName
 
