@@ -14,9 +14,14 @@ This file could place the ept cache on the globe.
 	* `Pdal` (https://pdal.io/index.html)
 	* `entwine` (https://entwine.io the binary build by conda works)
 * Clone repository
+	```git clone https://github.com/LIDAR-HD-IGN/PointsTools.git```
+* install node dependencies
+	```npm install```
 * setup configuration files:
 	```js
 	module.exports = {
+		// set number of parallel threads
+		threads: 4,
 		// set input folder to laz files
 		inputFolder: 'path to laz files',
 		// set ouput folder to ept cache
